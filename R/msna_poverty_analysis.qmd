@@ -1,0 +1,1491 @@
+---
+title: "MSNA Poverty Analysis"
+subtitle: "JMMI - ETH2001 & MSNA - ETH2403"
+author: 
+  - Getu GARI
+  - Nizar Ben Salah
+date: last-modified
+format:
+  html:
+    self-contained: true
+    toc: true
+    toc-depth: 3
+    toc-location: right
+    sidebar: true
+    page-layout: full
+    theme: cosmo
+    number-sections: true
+---
+
+```{r logo, echo=FALSE}
+htmltools::img(src = knitr::image_uri("../support_files/reach_logo.png"),
+               alt = "REACH logo",
+               style = 'position:absolute; top:110px; right:50px; padding:0; margin:20; width:250px')
+```
+
+```{r setup, include=FALSE}
+# Load tidyverse and related packages
+library(tidyverse)
+library(readxl)
+```
+
+::: {.panel-tabset}
+
+# Preface {#preface}
+
+This analysis uses data from the 2024 Multi-Sector Needs Assessment (MSNA), covering 15 zones across Ethiopia. The zones assessed are listed below.
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Read MSNA choice list from the XLSForm tool
+msna_tool <- read_excel("../inputs/ETH2403_MSNA_2024_tool.xlsx", sheet = "choices")
+
+# Read the MSNA main dataset
+msna_data <- read_csv("../inputs/eth_msna_data.csv")
+```
+
+## MSNA Covered Zones
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+library(knitr)
+library(kableExtra)
+
+# Create zone mapping table
+zone_data <- msna_data %>%
+  distinct(admin2) %>%
+  left_join(msna_tool %>%
+                filter(name %in% c("ET0604", "ET0802", "ET0412", "ET0415", "ET0417", "ET1600", 
+                                   "ET0414", "ET0422", "ET0102", "ET0106", "ET0103", "ET0411", 
+                                   "ET0203", "ET0409", "ET0603", "ET0107", "ET0201", "ET0206")) %>%
+                select(name, label = `label::English`),
+            by = c("admin2" = "name")) %>%
+    arrange(label) %>% 
+    select(`Zone Code` = admin2, `Zone Name` = label)
+    
+# Print formatted table
+zone_data %>%
+    kable(align = c('c', 'l'), format = "html", caption = " ") %>%
+    kable_styling(bootstrap_options = c("striped", "hover"),
+                  full_width = FALSE, position = "center", font_size = 14) %>%
+    row_spec(0, bold = TRUE, background = "#f8f9fa") %>%
+    column_spec(1, width = "10em") %>%
+    column_spec(2, width = "5em") %>%
+    footnote(general = "",
+    general_title = "Note: During research design phase, Sidama region (admin 1) consisted of one zone (admin 2) of the same name")
+```
+
+# Data Exploration
+
+## Household Total Income
+
+```{r}
+#| echo: false
+#| message: false
+
+msna_data <- msna_data %>%
+  mutate(total_income = rowSums(select(., cm_income_source_salaried_n, cm_income_source_casual_n, cm_income_source_own_business_n,
+                                          cm_income_source_own_production_n, cm_income_source_social_benefits_n, 
+                                          cm_income_source_rent_n, cm_income_source_remittances_n, cm_income_source_assistance_n,
+                                          cm_income_source_support_friends_n,  cm_income_source_donation_n), na.rm = TRUE),
+         sustainable_income = rowSums(select(., cm_income_source_salaried_n, cm_income_source_own_business_n, 
+                                                cm_income_source_own_production_n, cm_income_source_social_benefits_n,
+                                                cm_income_source_rent_n, cm_income_source_remittances_n), na.rm = TRUE),
+         total_expenditure = rowSums(select(., cm_expenditure_frequent_food, cm_expenditure_frequent_substances,
+                                               cm_expenditure_frequent_rent, cm_expenditure_frequent_water,
+                                               cm_expenditure_frequent_nfi, cm_expenditure_frequent_utilitiues, 
+                                               cm_expenditure_frequent_fuel, cm_expenditure_frequent_transportation,
+                                               cm_expenditure_frequent_communication, cm_expenditure_frequent_others), na.rm = TRUE))
+```
+
+```{r}
+#| echo: false
+#| message: false
+
+# Calculate median for optional subtitle
+med_total_income <- median(msna_data$total_income, na.rm = TRUE)
+
+ggplot(data = msna_data, aes(x = total_income)) + 
+  geom_histogram(bins = 60, alpha = 0.7, fill = "#58585A") + 
+  scale_x_continuous(labels = scales::dollar_format(prefix = "ETB")) +
+  ggtitle("Total Income Distribution") +
+  labs(subtitle = paste("Median Total Income:", scales::dollar(med_total_income, prefix = "ETB")),
+       x = "", y = "Number of households",
+       caption = "*Before outlier removal and adjustments*") +
+  theme_minimal()
+```
+
+## Household Sustainable Income
+
+::: {.callout-warning}
+### Warning
+
+Please note that `Sustainable Income` is defined as the sum of income derived from the following stable sources: **Salaried work, Own business activities, Own production, Social benefits (e.g., pensions, government subsidies, or other forms of official support), Remittances**, and **Rental income**.  
+These are considered more reliable income sources for long-term household financial stability.
+:::
+
+```{r}
+#| echo: false
+#| message: false
+
+# Calculate median for optional subtitle
+med_sustainable_income <- median(msna_data$sustainable_income, na.rm = TRUE)
+
+ggplot(data = msna_data, aes(x = sustainable_income)) + 
+  geom_histogram(bins = 30, alpha = 0.7, fill = "#D2CBB8") + 
+  scale_x_continuous(labels = scales::dollar_format(prefix = "ETB")) +
+  ggtitle("Distribution of the Sustainable Income of Households") +
+  labs(subtitle = paste("Median Sustainable Income:", scales::dollar(med_sustainable_income, prefix = "ETB")),
+       x = "", y = "Number of households",
+       caption = "*Before outlier removal and adjustments*") +
+  theme_minimal()
+```
+
+## Household Total Expenditure
+
+::: {.callout-note}
+### Note
+
+Total `Expenditure` is defined as the sum of household spending on the following categories on **Food Items, Frequent Non-Food Items**, and **Fuel**.  
+These categories represent essential recurring household expenses captured in the survey.
+:::
+
+```{r}
+#| echo: false
+#| message: false
+
+# Calculate median for optional subtitle
+med_total_expenditure <- median(msna_data$total_expenditure, na.rm = TRUE)
+
+ggplot(data = msna_data, aes(x = total_expenditure)) + 
+    geom_histogram(bins = 60, alpha = 0.7, fill = "#EE5859") + 
+    scale_x_continuous(labels = scales::dollar_format(prefix = "ETB")) +
+    ggtitle("Expenditure Distribution") +
+    labs(subtitle = paste("Median Expenditure:", scales::dollar(med_total_expenditure, prefix = "ETB")),
+         x = "", y = "Number of households",
+         caption = "*Before outlier removal and adjustments*") +
+    theme_minimal()
+```
+
+# Data Preparation
+
+## Trimmed Data
+
+The first step in data preparation is to remove the **top and bottom 1%** of values (to reduce the influence of outliers), and any **missing values (NAs)** of the total income distribution as well the expenditure distribution.
+
+```{r equations, echo=FALSE, results='asis'}
+cat("$$ Percentile_1 < \\text{Total Income} < Percentile_{99} $$
+     $$ Percentile_1 < \\text{Expenditure} < Percentile_{99} $$
+
+Where:
+$Percentile_1$ = 1$^{\\text{st}}$ percentile (lower bound), $Percentile_{99}$ = 99$^{\\text{th}}$ percentile (upper bound)")
+```
+
+```{r}
+#| echo: false
+#| message: false
+
+# Define trimming/percentile bounds thresholds function
+quantile_bounds <- function(x) quantile(x, probs = c(0.01, 0.99), na.rm = TRUE)
+
+# Calculate bounds for each variable
+income_bounds <- quantile_bounds(msna_data$total_income)
+sustain_bounds   <- quantile_bounds(msna_data$sustainable_income)
+exp_bounds    <- quantile_bounds(msna_data$total_expenditure)
+
+# Remove outliers (top/bottom 1%) and missing values (NAs)
+msna_clean_data <- msna_data %>%
+  filter(between(total_income, income_bounds[1], income_bounds[2]),
+         between(sustainable_income, sustain_bounds[1], sustain_bounds[2]),
+         between(total_expenditure, exp_bounds[1], exp_bounds[2]),
+         !is.na(total_income), !is.na(sustainable_income), !is.na(total_expenditure))
+```
+
+### Trimmed Household Total Income
+
+```{r}
+#| echo: false
+#| message: false
+
+ggplot(data = msna_clean_data, aes(x = total_income)) + 
+  geom_histogram(bins = 50, alpha = 0.7, fill = "#58585A") + 
+  scale_x_continuous(labels = scales::dollar_format(prefix = "ETB")) +
+  ggtitle("Distribution of the Total Income of Households") +
+  labs(#subtitle = "After outlier removal and adjustments",
+      x = "", y = "Number of households",
+      caption = "Total Income \n using trimmed data") +
+  theme_minimal()
+```
+
+### Trimmed Household Sustainable Income
+
+```{r}
+#| echo: false
+#| message: false
+
+ggplot(data = msna_clean_data, aes(x = sustainable_income)) + 
+  geom_histogram(bins = 50, alpha = 0.7, fill = "#D2CBB8") + 
+  scale_x_continuous(labels = scales::dollar_format(prefix = "ETB")) +
+  ggtitle("Distribution of the Sustainable Income of Households") +
+  labs(#subtitle = "After outlier removal and adjustments",
+      x = "", y = "Number of households",
+      caption = "Sustainable Income \n using trimmed data") +
+  theme_minimal()
+```
+
+### Trimmed Household Total Expenditure
+
+```{r}
+#| echo: false
+#| message: false
+
+ggplot(data = msna_clean_data, aes(x = total_expenditure)) + 
+  geom_histogram(bins = 50, alpha = 0.7, fill = "#EE5859") + 
+  scale_x_continuous(labels = scales::dollar_format(prefix = "ETB")) +
+  ggtitle("Distribution of the Expenditure of Households") +
+  labs(#subtitle = "After outlier removal and adjustments",
+      x = "", y = "Number of households",
+      caption = "Expenditure \n using trimmed data") +
+  theme_minimal()
+```
+
+### Comparing the distributions of the Trimmed Total Income and the Trimmed Expenditure
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-height: 8
+#| fig-width: 14
+
+library(patchwork)
+
+# Prepare long-format data for shared color legend
+msna_long <- bind_rows(msna_clean_data %>% select(value = total_income) %>% mutate(variable = "Total Income"),
+                       msna_clean_data %>% select(value = sustainable_income) %>% mutate(variable = "Sustainable Income"),
+                       msna_clean_data %>% select(value = total_expenditure) %>% mutate(variable = "Total Expenditure"))
+
+# Set color palette
+color_palette <- c("Total Income" = "#58585A", "Sustainable Income" = "#D2CBB8", "Total Expenditure" = "#EE5859")
+
+# Calculate common density y-axis range
+density_range <- range(density(msna_clean_data$total_income, na.rm = TRUE)$y,
+                       density(msna_clean_data$sustainable_income, na.rm = TRUE)$y,
+                       density(msna_clean_data$total_expenditure, na.rm = TRUE)$y)
+
+# Custom plotting function
+create_distribution_plot <- function(data, var_label, show_y_label = FALSE) {
+    dat <- data %>% filter(variable == var_label)
+    median_val <- median(dat$value, na.rm = TRUE)
+  
+# Density plot
+p_density <- ggplot(dat, aes(x = value, fill = variable)) +
+    geom_density(alpha = 0.7, color = NA) +
+    scale_x_continuous(labels = scales::dollar_format(prefix = "ETB")) +
+    scale_y_continuous(limits = c(0, density_range[2] * 1.1)) +
+    scale_fill_manual(values = color_palette) +
+    labs(y = if (show_y_label) "" else NULL, fill = NULL) +
+    theme_minimal(base_size = 12) +
+    theme(axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          panel.grid.major.y = element_blank())
+  
+# Boxplot (no legend)
+p_box <- ggplot(dat, aes(x = value, y = "")) +
+    geom_boxplot(fill = color_palette[[var_label]], alpha = 0.7, width = 0.3, 
+                 outlier.shape = NA, color = "#333333") +
+    geom_text(aes(x = median_val, y = 1.2),
+              label = paste0("Median: ETB", format(round(median_val), big.mark = ",")),
+              color = "#333333", size = 3.5, vjust = -0.5) +
+    scale_x_continuous(labels = scales::dollar_format(prefix = "ETB")) +
+    labs(x = NULL, y = NULL) +
+    theme_minimal(base_size = 12) +
+    theme(axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          panel.grid.major.y = element_blank())
+  
+# Jitter plot (no legend)
+p_jitter <- ggplot(dat, aes(x = value, y = "")) +
+    geom_jitter(height = 0.15, alpha = 0.5, color = color_palette[[var_label]],
+                size = 1.5, width = 0) +
+    scale_x_continuous(labels = scales::dollar_format(prefix = "ETB")) +
+    labs(caption = paste0("Range: ", format(round(min(dat$value, na.rm = TRUE)), big.mark = ","), " - ",
+                          format(round(max(dat$value, na.rm = TRUE)), big.mark = ","), " ETB",
+                          " | n = ", sum(!is.na(dat$value)), 
+                          " | using trimmed data"),
+         x = NULL, y = NULL) +
+    theme_minimal(base_size = 12) +
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          plot.caption = element_text(hjust = 0, color = "#666666"),
+          panel.grid.major.y = element_blank())
+  
+# Combine vertically
+  (p_density / p_box / p_jitter) + plot_layout(heights = c(3, 1.2, 2))
+}
+
+# Only the first plot gets y-axis label text (but no ticks or values)
+income_plot <- create_distribution_plot(msna_long, "Total Income", show_y_label = TRUE)
+sust_plot   <- create_distribution_plot(msna_long, "Sustainable Income")
+expend_plot <- create_distribution_plot(msna_long, "Total Expenditure")
+
+# Combine with one shared legend at bottom
+combined_plot <- (income_plot | sust_plot | expend_plot) +
+    plot_layout(guides = "collect") &
+    theme(legend.position = "bottom")
+
+combined_plot 
+```
+
+## Data Standardisation
+
+### Computing the Equivalent household size
+
+The equivalent household size is computed using
+
+```{r equations2, echo=FALSE, results='asis'}
+cat("$$\\text{Equivalent Household Size} = \\sqrt{\\text{Household Size}}$$")
+```
+
+::: {.callout-note}
+## Note
+
+Using this result, we transform the **Total Income**, **Sustainable Income**, and the **Expenditure** to obtain standard comparable values:
+
+$$\text{Equivalent Total Income} = \frac{\text{Total Income}}{\text{Equivalent Household Size}}$$
+$$\text{Equivalent Sustainable Income} = \frac{\text{Sustainable Income}}{\text{Equivalent Household Size}}$$
+$$\text{Equivalent Expenditure} = \frac{\text{Expenditure}}{\text{Equivalent Household Size}}$$
+:::
+
+```{r}
+#| echo: false
+#| message: false
+
+msna_clean_data2 <- msna_clean_data %>%
+  mutate(equiv_hh_size = sqrt(hh_size),
+         equiv_total_income = total_income / equiv_hh_size,
+         equiv_sustainable_income = sustainable_income / equiv_hh_size,
+         equiv_total_expenditure = total_expenditure / equiv_hh_size)
+```
+
+### Equivalent Household Total Income
+
+```{r}
+#| echo: false
+#| message: false
+
+ggplot(data = msna_clean_data2, aes(x = equiv_total_income)) + 
+  geom_histogram(bins = 60, alpha = 0.7, fill = "#58585A") + 
+  scale_x_continuous(labels = scales::dollar_format(prefix = "ETB")) +
+  ggtitle("Distribution of the Total Income of Households") +
+  labs(#subtitle = "After outlier removal and adjustments",
+       x = "", y = "Number of households",
+      caption = "Total Income \n using equivalent data") +
+  theme_minimal()
+```
+
+### Equivalent Household Sustainable Income
+
+```{r}
+#| echo: false
+#| message: false
+
+ggplot(data = msna_clean_data2, aes(x = equiv_sustainable_income)) + 
+  geom_histogram(bins = 50, alpha = 0.7, fill = "#D2CBB8") + 
+  scale_x_continuous(labels = scales::dollar_format(prefix = "ETB")) +
+  ggtitle("Distribution of the Sustainable Income of Households") +
+  labs(#subtitle = "After outlier removal and adjustments",
+       x = "", y = "Number of households",
+      caption = "Sustainable Income \n using equivalent data") +
+  theme_minimal()
+```
+
+### Equivalent Household Total Expenditure
+
+```{r}
+#| echo: false
+#| message: false
+
+ggplot(data = msna_clean_data2, aes(x = equiv_total_expenditure)) + 
+  geom_histogram(bins = 50, alpha = 0.7, fill = "#EE5859") + 
+  scale_x_continuous(labels = scales::dollar_format(prefix = "ETB")) +
+  ggtitle("Distribution of the Expenditure of Households") +
+  labs(#subtitle = "After outlier removal and adjustments",
+       x = "", y = "Number of households",
+      caption = "Expenditure \n using equivalent data") +
+  theme_minimal()
+```
+
+### Comparing the distributions of the Equivalent Total Income, Sustainable Income and the Equivalent Expenditure
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-height: 8
+#| fig-width: 14
+
+library(patchwork)
+library(scales) # for comma formatting
+
+# Prepare long-format data
+msna_long2 <- bind_rows(msna_clean_data2 %>% select(value = equiv_total_income) %>% mutate(variable = "Equivalent Total Income"),
+                        msna_clean_data2 %>% select(value = equiv_sustainable_income) %>% mutate(variable = "Equivalent Sustainable Income"),
+                        msna_clean_data2 %>% select(value = equiv_total_expenditure) %>% mutate(variable = "Equivalent Total Expenditure"))
+
+# Set color palette
+color_palette <- c("Equivalent Total Income" = "#58585A", "Equivalent Sustainable Income" = "#D2CBB8",
+                   "Equivalent Total Expenditure" = "#EE5859")
+
+# Calculate common density y-axis range
+density_range <- range(density(msna_clean_data2$equiv_total_income, na.rm = TRUE)$y,
+                       density(msna_clean_data2$equiv_sustainable_income, na.rm = TRUE)$y,
+                       density(msna_clean_data2$equiv_total_expenditure, na.rm = TRUE)$y)
+
+# Custom plotting function
+create_distribution_plot <- function(data, var_label, show_y_label = FALSE) {
+    dat <- data %>% filter(variable == var_label)
+    median_val <- median(dat$value, na.rm = TRUE)
+    min_val <- min(dat$value, na.rm = TRUE)
+    max_val <- max(dat$value, na.rm = TRUE)
+    n_val <- sum(!is.na(dat$value))
+  
+# Density plot
+p_density <- ggplot(dat, aes(x = value, fill = variable)) +
+    geom_density(alpha = 0.7, color = NA) +
+    scale_x_continuous(labels = dollar_format(prefix = "ETB")) +
+    scale_y_continuous(limits = c(0, density_range[2] * 1.1)) +
+    scale_fill_manual(values = color_palette) +
+    labs(y = if (show_y_label) "" else NULL, fill = NULL) +
+    theme_minimal(base_size = 12) +
+    theme(axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          panel.grid.major.y = element_blank())
+  
+# Boxplot
+p_box <- ggplot(dat, aes(x = value, y = "")) +
+    geom_boxplot(fill = color_palette[[var_label]], alpha = 0.7, width = 0.3,
+                 outlier.shape = NA, color = "#333333") +
+    geom_text(aes(x = median_val, y = 1.2),
+              label = paste0("Median: ETB", format(round(median_val), big.mark = ",")),
+              color = "#333333", size = 3.5, vjust = -0.5) +
+    scale_x_continuous(labels = dollar_format(prefix = "ETB")) +
+    labs(x = NULL, y = NULL) +
+    theme_minimal(base_size = 12) +
+    theme(axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          panel.grid.major.y = element_blank())
+  
+# Jitter plot
+p_jitter <- ggplot(dat, aes(x = value, y = "")) +
+    geom_jitter(height = 0.15, alpha = 0.5, color = color_palette[[var_label]], size = 1.5, width = 0) +
+    scale_x_continuous(labels = dollar_format(prefix = "ETB")) +
+    labs(caption = paste0("Range: ", format(round(min_val), big.mark = ","), " - ",
+                          format(round(max_val), big.mark = ","), " ETB",
+                          " | n = ", n_val),
+         x = NULL, y = NULL) +
+    theme_minimal(base_size = 12) +
+    theme(axis.text.y = element_blank(),
+          axis.ticks.y = element_blank(),
+          plot.caption = element_text(hjust = 0, color = "#666666"),
+          panel.grid.major.y = element_blank())
+  
+# Combine vertically
+  (p_density / p_box / p_jitter) + plot_layout(heights = c(3, 1.2, 2))
+}
+
+# Individual plots (first one with y-axis label)
+equiv_income_plot <- create_distribution_plot(msna_long2, "Equivalent Total Income", show_y_label = TRUE)
+equiv_sust_plot   <- create_distribution_plot(msna_long2, "Equivalent Sustainable Income")
+equiv_expend_plot <- create_distribution_plot(msna_long2, "Equivalent Total Expenditure")
+
+# Combine horizontally with shared legend and global caption
+combined_plot <- (equiv_income_plot | equiv_sust_plot | equiv_expend_plot) +
+    plot_layout(guides = "collect") &
+    theme(legend.position = "bottom")
+
+# Add final annotation
+combined_plot + plot_annotation(caption = "Note: using equivalent data",
+                                theme = theme(plot.caption = element_text(hjust = 0, size = 10, color = "#666666")))
+```
+
+### Median Equivalent Income and Expenditure by Zone
+
+```{r}
+#| echo: false
+#| message: false
+
+medians_per_zone <- msna_clean_data2 %>%
+  group_by(admin2 = admin2) %>%
+    summarise(`Median Equivalent Expenditure` = median(equiv_total_expenditure, na.rm = TRUE),
+              `Median Equivalent Sustainable Income` = median(equiv_sustainable_income, na.rm = TRUE),
+              `Median Equivalent Total Income` = median(equiv_total_income, na.rm = TRUE),
+              .groups = "drop") %>%
+    mutate(across(-admin2, ~ paste0("ETB", format(round(.x, 3), big.mark = ",")))) %>%
+    left_join(zone_data, by = c("admin2" = "Zone Code")) %>%
+    arrange(`Zone Name`) %>%
+    select(`Zone Name`, `Median Equivalent Expenditure`, `Median Equivalent Sustainable Income`, `Median Equivalent Total Income`)
+
+# Display table with kableExtra styling
+medians_per_zone %>%
+    kable(align = c("l", "c", "c", "c"), "html", caption = " ") %>%
+    kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+library(grid)  # for unit()
+
+# Prepare and reshape data
+df <- msna_clean_data2 %>%
+    left_join(zone_data, by = c("admin2" = "Zone Code")) %>%
+    select(admin2, `Zone Name`, equiv_total_expenditure, equiv_sustainable_income, equiv_total_income) %>%
+    pivot_longer(cols = c(equiv_total_expenditure, equiv_sustainable_income, equiv_total_income),
+                 names_to = "indicator", values_to = "value") %>%
+    mutate(indicator = recode(indicator,
+                              equiv_total_expenditure = "Equivalent Expenditure",
+                              equiv_sustainable_income = "Equivalent Sustainable Income",
+                              equiv_total_income = "Equivalent Total Income"),
+           indicator = factor(indicator, levels = c("Equivalent Expenditure", "Equivalent Sustainable Income", "Equivalent Total Income")))
+
+# Plot
+ggplot(df, aes(x = indicator, y = value, fill = indicator)) +
+    geom_col(width = 0.9) +
+    scale_fill_manual(values = c("Equivalent Expenditure" = "#e74c3c",
+                                 "Equivalent Sustainable Income" = "#dcd3b2",
+                                 "Equivalent Total Income" = "#333333")) +
+    scale_y_continuous(labels = scales::label_currency(prefix = "ETB", big.mark = ",", accuracy = 1)) +
+    facet_wrap(~ `Zone Name`, ncol = 5) +
+    labs(x = NULL, y = "", fill = NULL) +
+    theme_minimal() +
+    theme(legend.position = "top", 
+          axis.text.x = element_blank(),
+          panel.grid.major.x = element_blank(),
+          panel.spacing = unit(1.5, "lines"),
+          strip.text = element_text(face = "bold")) 
+```
+
+### Exploring the bottom 30% mark
+
+```{r}
+#| echo: false
+#| warning: false
+
+# Compute 30th percentile threshold
+p30_threshold <- quantile(msna_clean_data2$equiv_total_expenditure, probs = 0.30, na.rm = TRUE)
+
+# Format the value for both title and subtitle
+formatted_p30 <- format(round(p30_threshold, 0), big.mark = ",")
+
+# Plot
+ggplot(data = msna_clean_data2, aes(x = equiv_total_expenditure)) +
+    geom_histogram(bins = 30, alpha = 0.7, fill = "#EE5859", color = "white") +
+    geom_vline(xintercept = p30_threshold, color = "red", size = 1) +
+    scale_x_continuous(labels = label_currency(prefix = "ETB", big.mark = ",")) +
+    labs(title = paste("The 30% mark is at ETB", formatted_p30, "households are below the mark"),
+         x = "", y = "Number of households",
+         caption = "Equivalent Expenditure") +
+    theme_minimal()
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+# Compute 30th percentile threshold
+p30_threshold <- quantile(msna_clean_data2$equiv_sustainable_income, probs = 0.30, na.rm = TRUE)
+
+# Format the value for both title and subtitle
+formatted_p30 <- format(round(p30_threshold, 0), big.mark = ",")
+
+# Plot
+ggplot(data = msna_clean_data2, aes(x = equiv_sustainable_income)) +
+    geom_histogram(bins = 30, alpha = 0.7, fill = "#D2CBB8", color = "white") +
+    geom_vline(xintercept = p30_threshold, color = "red", size = 1) +
+    scale_x_continuous(labels = label_currency(prefix = "ETB", big.mark = ",")) +
+    labs(title = paste("The 30% mark is at ETB", formatted_p30, "households are below the mark"),
+         x = "", y = "Number of households",
+         caption = "Equivalent Sustainable Income") +
+    theme_minimal()
+```
+
+```{r}
+#| echo: false
+#| warning: false
+
+# Compute 30th percentile threshold
+p30_threshold <- quantile(msna_clean_data2$equiv_total_income, probs = 0.30, na.rm = TRUE)
+
+# Format the value for both title and subtitle
+formatted_p30 <- format(round(p30_threshold, 0), big.mark = ",")
+
+# Plot
+ggplot(data = msna_clean_data2, aes(x = equiv_total_income)) +
+    geom_histogram(bins = 30, alpha = 0.7, fill = "#58585A", color = "white") +
+    geom_vline(xintercept = p30_threshold, color = "red", size = 1) +
+    scale_x_continuous(labels = label_currency(prefix = "ETB", big.mark = ",")) +
+    labs(title = paste("The 30% mark is at ETB", formatted_p30, "households are below the mark"),
+         x = "", y = "Number of households",
+         caption = "Equivalent Total Income") +
+    theme_minimal()
+```
+
+# International Poverty Line
+
+Throughout this analysis, we will use the following operational exchange rates for converting United States Dollar (USD) to Ethiopian Birr (ETB).
+
+```{r}
+#| echo: false
+#| message: false
+
+# Create exchange rate table
+exchange_rates <- data.frame(Conversion = "USD → ETB",
+                             May  = "56.948",
+                             June = "57.042",
+                             July = "57.402")
+
+# Display the table with styling
+exchange_rates %>%
+    kable(caption = "Monthly USD to ETB Exchange Rates", 
+          col.names = c("Conversion", "May", "June", "July"),
+          align = c("l", "c", "c", "c"), format = "html") %>%
+    kable_styling(full_width = FALSE, font_size = 14,
+                  bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+## Calculating Poverty Lines
+
+We use the following formula for calculating the monthly poverty line in Ethiopian Birr (ETB)
+
+```{r equations3, echo=FALSE, results='asis'}
+cat("$$30 \\times \\text{Poverty Line (USD)} \\times \\text{Exchange Rate}_{\\text{USD→ETB}}$$\n\n
+
+Where: Exchange Rate is the average conversion rate from May to July")
+```
+
+```{r}
+#| echo: false
+#| message: false
+
+# Create the poverty data frame
+poverty_data <- data.frame("Daily Poverty Line"   = c("$6.85", "$3.65", "$2.15"),
+                           "Monthly Poverty Line" = c("ETB11,740.35", "ETB6,255.81", "ETB3,684.93"),
+                           check.names = FALSE)
+
+# Render the styled table
+kable(poverty_data, align = c("c", "c"), format = "html",
+      col.names = c("Daily Poverty Line", "Monthly Poverty Line")) %>%
+    kable_styling(full_width = FALSE, font_size = 14,
+                  bootstrap_options = c("striped", "hover"))
+```
+
+## Overall Proportion of Households Below the Poverty Line
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+library(srvyr)
+library(purrr)
+
+# Define poverty thresholds in ETB equivalent
+poverty_lines_usd <- c("$6.85" = 11740.35, "$3.65" = 6255.808, "$2.15" = 3684.928)
+
+# Convert msna_data to survey design
+survey_data <- msna_clean_data2 %>%
+    as_survey_design(weights = weight)
+
+# Calculate proportions for each poverty line
+poverty_results <- purrr::map_dfr(names(poverty_lines_usd), function(pl) {
+  threshold <- poverty_lines_usd[[pl]]
+  survey_data %>%
+    mutate(status = ifelse(equiv_total_income < threshold, "below", "above"),
+           poverty_line = pl) %>%
+    group_by(poverty_line, status) %>%
+    summarize(percentage = survey_mean(vartype = NULL, na.rm = TRUE) * 100,
+              .groups = "drop")
+})
+
+# Ensure correct factor ordering
+poverty_results <- poverty_results %>%
+  mutate(poverty_line = factor(poverty_line, levels = c("$2.15", "$3.65", "$6.85")))
+
+# Plot with adjusted bar width
+ggplot(poverty_results, aes(x = percentage, y = poverty_line, fill = status)) +
+  geom_col(position = "stack", width = 0.8) +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")),
+            position = position_stack(vjust = 0.5),
+            color = "white", size = 4) +
+  scale_fill_manual(values = c(below = "#EE5859", above = "#58585A"),
+                    labels = c(below = "Below Poverty Line", above = "Above Poverty Line")) +
+  labs(title = "Proportion of Households Living Under Poverty Lines",
+       subtitle = "Based on Household Equivalent Total Income",
+       x = NULL, y = "International Poverty Level", fill = "",
+       caption = "Using weighted data") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(),
+        axis.ticks.x = element_blank(),
+        legend.position = "bottom",
+        plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(size = 11),
+        axis.text = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.margin = margin(t = 10),
+        plot.caption.position = "plot",
+        plot.caption = element_text(hjust = 1, size = 9))
+```
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Define poverty thresholds in ETB equivalent
+poverty_lines_usd <- c("$6.85" = 11740.35, "$3.65" = 6255.808, "$2.15" = 3684.928)
+
+# Convert msna_data to survey design
+survey_data <- msna_clean_data2 %>%
+  as_survey_design(weights = weight)
+
+# Calculate proportions for each poverty line
+poverty_results <- purrr::map_dfr(names(poverty_lines_usd), function(pl) {
+  threshold <- poverty_lines_usd[[pl]]
+  survey_data %>%
+    mutate(status = ifelse(equiv_sustainable_income < threshold, "below", "above"),
+           poverty_line = pl) %>%
+    group_by(poverty_line, status) %>%
+    summarize(percentage = survey_mean(vartype = NULL, na.rm = TRUE) * 100,
+              .groups = "drop")
+})
+
+# Ensure correct factor ordering
+poverty_results <- poverty_results %>%
+  mutate(poverty_line = factor(poverty_line, levels = c("$2.15", "$3.65", "$6.85")))
+
+# Plot
+ggplot(poverty_results, aes(x = percentage, y = poverty_line, fill = status)) +
+  geom_col(position = "stack", width = 0.8) +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")),
+            position = position_stack(vjust = 0.5),
+            color = "white", size = 4) +
+  scale_fill_manual(values = c(below = "#EE5859", above = "#58585A"),
+                    labels = c(below = "Below Poverty Line", above = "Above Poverty Line")) +
+  labs(title = "Proportion of Households Living Under Poverty Lines",
+       subtitle = "Based on Household Equivalent Sustainable Income",
+       x = NULL, y = "International Poverty Level", fill = "",
+       caption = "Using weighted data") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(), # Remove x-axis text
+        axis.ticks.x = element_blank(), # Remove x-axis ticks
+        legend.position = "bottom",
+        plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(size = 11),
+        axis.text = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.margin = margin(t = 10),
+        plot.caption.position = "plot",  # Moves caption to right-hand side
+        plot.caption = element_text(hjust = 1, size = 9))
+```
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Define poverty thresholds in ETB equivalent
+poverty_lines_usd <- c("$6.85" = 11740.35, "$3.65" = 6255.808, "$2.15" = 3684.928)
+
+# Convert msna_data to survey design
+survey_data <- msna_clean_data2 %>%
+  as_survey_design(weights = weight)
+
+# Calculate proportions for each poverty line
+poverty_results <- purrr::map_dfr(names(poverty_lines_usd), function(pl) {
+  threshold <- poverty_lines_usd[[pl]]
+  survey_data %>%
+    mutate(status = ifelse(equiv_total_expenditure < threshold, "below", "above"),
+           poverty_line = pl) %>%
+    group_by(poverty_line, status) %>%
+    summarize(percentage = survey_mean(vartype = NULL, na.rm = TRUE) * 100,
+              .groups = "drop")
+})
+
+# Ensure correct factor ordering
+poverty_results <- poverty_results %>%
+  mutate(poverty_line = factor(poverty_line, levels = c("$2.15", "$3.65", "$6.85")))
+
+# Plot
+ggplot(poverty_results, aes(x = percentage, y = poverty_line, fill = status)) +
+  geom_col(position = "stack", width = 0.8) +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")),
+            position = position_stack(vjust = 0.5),
+            color = "white", size = 4) +
+  scale_fill_manual(values = c(below = "#EE5859", above = "#58585A"),
+                    labels = c(below = "Below Poverty Line", above = "Above Poverty Line")) +
+  labs(title = "Proportion of Households Living Under Poverty Lines",
+       subtitle = "Based on Household Equivalent Expenditure",
+       x = NULL, y = "International Poverty Level", fill = "",
+       caption = "Using weighted data") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(), # Remove x-axis text
+        axis.ticks.x = element_blank(), # Remove x-axis ticks
+        legend.position = "bottom",
+        plot.title = element_text(face = "bold", size = 14),
+        plot.subtitle = element_text(size = 11),
+        axis.text = element_text(size = 10),
+        legend.text = element_text(size = 10),
+        legend.margin = margin(t = 10),
+        plot.caption.position = "plot",  # Moves caption to right-hand side
+        plot.caption = element_text(hjust = 1, size = 9))
+```
+
+## Proportion of Households Living Below the Poverty Line by Zone
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Define poverty thresholds in ETB/year
+poverty_lines_usd <- c("$6.85" = 11740.35, "$3.65" = 6255.808, "$2.15" = 3684.928)
+
+# Convert to survey design and join with zone names
+survey_data <- msna_clean_data2 %>%
+    left_join(zone_data, by = c("admin2" = "Zone Code")) %>%
+    as_survey_design(weights = weight)
+
+# Compute proportions below/above each poverty line by zone
+poverty_results_zone <- purrr::map_dfr(names(poverty_lines_usd), function(pl) {
+    threshold <- poverty_lines_usd[[pl]]
+    survey_data %>%
+        mutate(status = ifelse(equiv_total_income < threshold, "below", "above"),
+               poverty_line = pl) %>%
+        group_by(`Zone Name`, poverty_line, status) %>%
+        summarize(percentage = survey_mean(vartype = NULL, na.rm = TRUE) * 100,
+                  .groups = "drop")
+})
+
+# Ensure ordered factor for plotting
+poverty_results_zone <- poverty_results_zone %>%
+    mutate(poverty_line = factor(poverty_line, levels = c("$2.15", "$3.65", "$6.85")))
+
+# Faceted bar plot
+ggplot(poverty_results_zone, aes(x = percentage, y = poverty_line, fill = status)) +
+    geom_col(position = "stack") +
+    geom_text(aes(label = paste0(round(percentage, 1), "%")),
+              position = position_stack(vjust = 0.5),
+              color = "white", size = 4) +
+    scale_fill_manual(values = c(below = "#EE5859", above = "#58585A"),
+                      labels = c(below = "Below Poverty Line", above = "Above Poverty Line")) +
+    labs(title = "Proportion of Households Below International Poverty Lines",
+         subtitle = "Disaggregated by Zone, Based on Household Equivalent Total Income",
+         x = NULL, y = "International Poverty Line", fill = "",
+         caption = "Using weighted data") +
+    facet_wrap(~`Zone Name`, ncol = 5) +
+    theme_minimal() +
+    theme(axis.text.x = element_blank(),
+          axis.ticks.x = element_blank(),
+          legend.position = "bottom",
+          plot.title = element_text(face = "bold", size = 14),
+          plot.subtitle = element_text(size = 11),
+          strip.text = element_text(face = "bold"),
+          legend.text = element_text(size = 10),
+          legend.margin = margin(t = 10),
+          plot.caption.position = "plot",
+          plot.caption = element_text(hjust = 1, size = 9))
+```
+
+## Comparison of Income Levels with Poverty Lines by Zone
+
+```{r}
+#| echo: false
+#| message: false
+
+# Define poverty lines in ETB
+poverty_lines_usd <- c("$2.15" = 3684.928, "$3.65" = 6255.808, "$6.85" = 11740.35)
+
+# Merge zone names into main data
+filtered_data <- msna_clean_data2 %>%
+  left_join(zone_data, by = c("admin2" = "Zone Code"))
+
+# Calculate medians for income variables per zone
+medians_df <- filtered_data %>%
+  group_by(`Zone Name`) %>%
+  summarize(median_total_income = median(equiv_total_income, na.rm = TRUE),
+            median_sust_income = median(equiv_sustainable_income, na.rm = TRUE), 
+            .groups = "drop")
+
+options(digits = 2)
+
+# Build full table for all zones and poverty lines
+final_df <- tidyr::crossing(`Zone Name` = sort(unique(filtered_data$`Zone Name`)),
+                            `International Poverty Line` = names(poverty_lines_usd)) %>%
+  left_join(medians_df, by = "Zone Name") %>%
+  mutate(`Poverty Line (C)` = poverty_lines_usd[`International Poverty Line`],
+         `Median Equivalent Total Income (A)` = median_total_income,
+         `Median Equivalent Sustainable Income (B)` = median_sust_income,
+         `(A - C)` = median_total_income - `Poverty Line (C)`,
+         `(B - C)` = median_sust_income - `Poverty Line (C)`) %>%
+    select(`Zone Name`, `International Poverty Line`,
+           `Poverty Line (C)`,
+           `Median Equivalent Total Income (A)`, `(A - C)`,
+           `Median Equivalent Sustainable Income (B)`, `(B - C)`) %>%
+  mutate(across(where(is.numeric),
+                ~ ifelse(is.na(.x), NA,
+             ifelse(.x < 0,
+                    paste0("-ETB", format(round(abs(.x), 3), big.mark = ",")),
+                    paste0("ETB", format(round(.x, 3), big.mark = ",")))))) %>%
+  group_by(`Zone Name`) %>%
+  mutate(`Zone Name` = replace(`Zone Name`, row_number() != 1, "")) %>%
+  ungroup()
+
+# Render grouped table with merged zone names
+final_df %>%
+    knitr::kable(format = "html",  # Use "latex" for PDF
+                 align = c("l", "c", "c", "c", "c", "c", "c"),
+                 col.names = c("Zone Name", "International Poverty Line", "Poverty Line (C)",
+                               "Median Equivalent Total Income (A)", "(A - C)",
+                               "Median Equivalent Sustainable Income (B)", "(B - C)")) %>%
+    kableExtra::kable_styling(full_width = FALSE, position = "center", font_size = 12) %>%
+    kableExtra::row_spec(0, bold = TRUE)
+```
+
+## Proportion of Households Below Poverty Lines by Zone
+
+### Based on Total Income
+
+```{r}
+#| echo: false
+#| message: false
+
+# Define poverty thresholds in ETB
+poverty_lines <- c("X6.85" = 11740.35, "X3.65" = 6255.808, "X2.15" = 3684.928)
+
+# Merge zone names
+filtered_data <- msna_clean_data2 %>%
+  left_join(zone_data, by = c("admin2" = "Zone Code"))
+
+# Calculate proportions below each poverty line
+poverty_props <- filtered_data %>%
+  group_by(`Zone Name`) %>%
+  summarize(`Proportion below $6.85` = mean(total_income < poverty_lines["X6.85"], na.rm = TRUE) * 100,
+            `Proportion below $3.65` = mean(total_income < poverty_lines["X3.65"], na.rm = TRUE) * 100,
+            `Proportion below $2.15` = mean(total_income < poverty_lines["X2.15"], na.rm = TRUE) * 100,
+            .groups = "drop") %>%
+    arrange(`Zone Name`) %>%
+    mutate(across(starts_with("Proportion"), ~ sprintf("%.2f%%", .)))
+
+# Render final table
+knitr::kable(poverty_props,
+             align = c("l", "c", "c", "c"),
+             format = "pipe",
+             col.names = c("Zone Name",
+                           "Proportion below $6.85",
+                           "Proportion below $3.65",
+                           "Proportion below $2.15")) %>%
+    kableExtra::kable_styling(full_width = FALSE, position = "center", font_size = 14, 
+                              latex_options = "hold_position") %>%
+    kableExtra::row_spec(0, bold = TRUE) %>%
+    kableExtra::column_spec(1, width = "4cm") %>%
+    kableExtra::column_spec(2:4, width = "3cm") %>%
+    kableExtra::add_header_above(c(" " = 1,
+                                   "Proportion of Households Total Income below Poverty Line" = 3))
+```
+
+### Based on Sustainable Income
+
+```{r}
+#| echo: false
+#| message: false
+
+# Define poverty thresholds in ETB
+poverty_lines <- c("X6.85" = 11740.35, "X3.65" = 6255.808, "X2.15" = 3684.928)
+
+# Merge zone names
+filtered_data <- msna_clean_data2 %>%
+  left_join(zone_data, by = c("admin2" = "Zone Code"))
+
+# Calculate proportions below each poverty line
+poverty_props <- filtered_data %>%
+  group_by(`Zone Name`) %>%
+  summarize(`Proportion below $6.85` = mean(sustainable_income < poverty_lines["X6.85"], na.rm = TRUE) * 100,
+            `Proportion below $3.65` = mean(sustainable_income < poverty_lines["X3.65"], na.rm = TRUE) * 100,
+            `Proportion below $2.15` = mean(sustainable_income < poverty_lines["X2.15"], na.rm = TRUE) * 100,
+            .groups = "drop") %>%
+    arrange(`Zone Name`) %>%
+    mutate(across(starts_with("Proportion"), ~ sprintf("%.2f%%", .)))
+
+# Render final table
+knitr::kable(poverty_props,
+             align = c("l", "c", "c", "c"), format = "pipe",
+             col.names = c("Zone Name",
+                           "Proportion below $6.85",
+                           "Proportion below $3.65",
+                           "Proportion below $2.15")) %>%
+    kableExtra::kable_styling(full_width = FALSE, position = "center", font_size = 14,
+                              latex_options = "hold_position") %>%
+    kableExtra::row_spec(0, bold = TRUE) %>%
+    kableExtra::column_spec(1, width = "4cm") %>%
+    kableExtra::column_spec(2:4, width = "3cm") %>%
+    kableExtra::add_header_above(c(" " = 1,
+                                   "Proportion of Households Total Income below Poverty Line" = 3))
+```
+
+# MEB Based Poverty Line
+
+```{r}
+#| echo: false
+#| message: false
+
+# Step 1: Read monthly JMMI MEB data and tag each with the corresponding month
+meb_may <- read_csv("../inputs/eth_jmmi_meb_may.csv") %>% mutate(month = "May")
+meb_june <- read_csv("../inputs/eth_jmmi_meb_june.csv") %>% mutate(month = "June")
+meb_july <- read_csv("../inputs/eth_jmmi_meb_july.csv") %>% mutate(month = "July")
+
+# Step 2: Combine all three months of data
+meb_data <- bind_rows(meb_may, meb_june, meb_july)
+
+# Step 3: Filter for zone-level data and compute the 3-month average basket cost
+meb_avg_zone <- meb_data %>%
+  filter(admin.level == "Zone", month %in% c("May", "June", "July")) %>%
+  group_by(admin.pcode) %>%
+  summarise(avg_meb_cost = mean(`full.basket.cost`, na.rm = TRUE), .groups = "drop")
+```
+
+Overview of the zones covered by the MSNA but not by the JMMI, along with the corresponding zones they have been matched with in the two assessments.
+
+```{r}
+#| echo: false
+#| message: false
+
+# Join zone names into meb_avg_zone
+zones_joined <- meb_avg_zone %>%
+    left_join(zone_data, by = c("admin.pcode" = "Zone Code"))
+
+# 1. Zones covered in both MSNA and JMMI
+zones_both <- zones_joined %>%
+    filter(!is.na(`Zone Name`)) %>%
+    distinct(`Zone Name`) %>%
+    arrange(`Zone Name`) %>%
+    pull(`Zone Name`)
+
+# 2. Zones in MSNA but NOT in JMMI (excluding those already in both)
+zones_only_msna <- zone_data %>%
+    filter(!is.na(`Zone Name`)) %>%
+    filter(!`Zone Name` %in% zones_both) %>%
+    distinct(`Zone Name`) %>%
+    arrange(`Zone Name`) %>%
+    pull(`Zone Name`)
+
+# Create combined tibble with equal-length columns and clean headers
+max_len <- max(length(zones_both), length(zones_only_msna))
+zone_comparison <- tibble(`Zones covered in both the MSNA and the JMMI` = c(zones_both, rep("", max_len - length(zones_both))),
+                          `Zones covered by the MSNA but not by the JMMI` = c(zones_only_msna, rep("", max_len - length(zones_only_msna))))
+
+# Print the table
+zone_comparison %>%
+    kable("html", caption = "Comparison of Zone Coverage: MSNA and JMMI", escape = FALSE) %>%
+    kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover"))
+```
+
+## Geographic Distribution of MSNA and JMMI Assessments by Zone
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+# Load shapefile
+zone_shapefile <- st_read("../support_files/ETH_admin2_2024/ETH_Zones.shp", crs = 4326, quiet = TRUE)
+
+# Merge MEB data with zone info
+jmmi_meb_data <- meb_avg_zone %>%
+  left_join(zone_data, by = c("admin.pcode" = "Zone Code"))
+
+# Create coverage status column
+coverage_map <- zone_shapefile %>%
+  mutate(msna = admin2Pcod %in% msna_clean_data2$admin2,
+         jmmi = admin2Pcod %in% jmmi_meb_data$admin.pcode,
+         source = case_when(msna & jmmi ~ "Both MSNA & JMMI",
+                            msna & !jmmi ~ "MSNA only",
+                            !msna & jmmi ~ "JMMI only",
+                            TRUE ~ "Not Assessed"))
+
+# Create tooltip label
+coverage_map <- coverage_map %>%
+  mutate(hover_label = paste0("Zone: ", admin2Name, "<br>Source: ", source))
+
+# Plot with reduced border size
+p <- ggplot(coverage_map) +
+  geom_sf(aes(fill = source, text = hover_label), color = "white", size = 0.01) +
+  scale_fill_manual(values = c("Both MSNA & JMMI" = "#EE5859",
+                               "MSNA only" = "#58585A",
+                               "JMMI only" = "#D2CBB8",
+                               "Not Assessed" = "grey90")) +
+    labs(title = "", fill = "Data Source") +
+    theme_minimal() +
+    theme(axis.line = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          panel.grid = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank())
+
+# Convert to interactive plot
+ggplotly(p, tooltip = "text")
+```
+
+## Median JMMI basket cost
+
+Compute the median JMMI basket cost for each zone over three months (May, June, July) and calculate the 3-month average `full.basket.cost` at the zone level (*admin2*).
+
+```{r}
+#| echo: false
+#| message: false
+
+library(scales)  # for comma()
+
+# Average JMMI MEB cost per zone over the three-month period
+jmmi_meb_cost <- meb_avg_zone %>%
+    left_join(zone_data, by = c("admin.pcode" = "Zone Code")) %>%
+    arrange(`Zone Name`) %>%
+    filter(!is.na(`Zone Name`)) %>%
+    mutate(`Average MEB` = paste0("ETB ", comma(avg_meb_cost, accuracy = 1)),
+           `Equivalent MEB*` = paste0("ETB ", comma(avg_meb_cost / sqrt(5), accuracy = 1))) %>%
+    select(`Zone Name`, `Average MEB`, `Equivalent MEB*`)
+
+# Display table with kableExtra styling
+jmmi_meb_cost %>%
+    kable(align = c("l", "c", "c"), format = "html",
+          caption = "Average and Equivalent Monthly MEB Cost by Zone (May–July 2024)") %>%
+    kable_styling(full_width = FALSE, bootstrap_options = c("striped", "hover")) %>%
+    footnote(general = " ", general_title = "Note: *The Equivalent MEB is calculated as the Average MEB / √5")
+```
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+#| fig-height: 8
+#| fig-width: 14
+
+# Clean, aggregate, and transform data
+plot_data <- msna_clean_data2 %>%
+    left_join(zone_data, by = c("admin2" = "Zone Code")) %>%
+    left_join(jmmi_meb_cost, by = "Zone Name") %>%
+    mutate(`Equivalent MEB*` = parse_number(`Equivalent MEB*`),
+           Zone = `Zone Name`) %>%
+    group_by(Zone) %>%
+    summarise(`Equivalent MEB*` = mean(`Equivalent MEB*`, na.rm = TRUE),
+              total_expenditure = mean(total_expenditure, na.rm = TRUE),
+              equiv_sustainable_income = mean(equiv_sustainable_income, na.rm = TRUE),
+              equiv_total_income = mean(equiv_total_income, na.rm = TRUE),
+              .groups = "drop") %>%
+    pivot_longer(cols = c(`Equivalent MEB*`, total_expenditure, 
+                          equiv_sustainable_income, equiv_total_income),
+                 names_to = "Metric", values_to = "Value") %>%
+    mutate(Metric = recode(Metric,
+                           `Equivalent MEB*` = "Equivalent MEB",
+                           total_expenditure = "Equivalent Expenditure",
+                           equiv_sustainable_income = "Equivalent Sustainable Income",
+                           equiv_total_income = "Equivalent Total Income"),
+           Zone = factor(Zone, levels = rev(unique(Zone))),
+           Value_label = paste0("ETB ", round(Value)))  # formatted label
+
+# Plot with thin lines connecting the points
+ggplot(plot_data, aes(x = Value, y = Zone)) +
+    geom_line(aes(group = Zone), color = "grey60", linewidth = 0.5) +  # Thin line connecting points
+    geom_point(aes(color = Metric, fill = Metric, shape = Metric), 
+               size = 2, stroke = 1) +
+    scale_x_continuous(labels = label_number(prefix = "ETB", big.mark = ","),
+                       breaks = seq(1000, 6000, by = 1000),  # Custom breaks every 1000 units
+                       limits = c(1000, 6000)) +  # Limits based on the provided range
+    scale_shape_manual(values = c("Equivalent MEB" = 23,                # Diamond
+                                  "Equivalent Expenditure" = 22,        # Square
+                                  "Equivalent Sustainable Income" = 21, # Circle
+                                  "Equivalent Total Income" = 24)) +    # Triangle
+    scale_color_manual(values = c("Equivalent MEB" = "#F1797A",
+                                  "Equivalent Expenditure" = "#EE5859",
+                                  "Equivalent Sustainable Income" = "#D2CBB8",
+                                  "Equivalent Total Income" = "#58585A")) +
+    scale_fill_manual(values = c("Equivalent MEB" = "#F1797A",
+                                 "Equivalent Expenditure" = "#EE5859",
+                                 "Equivalent Sustainable Income" = "#D2CBB8",
+                                 "Equivalent Total Income" = "#58585A")) +
+    labs(x = NULL, y = NULL, shape = NULL, color = NULL, fill = NULL) +
+    theme_minimal() +
+    theme(legend.position = "bottom",
+          legend.box = "horizontal",
+          panel.grid.major.y = element_blank(),
+          panel.grid.minor.x = element_blank(),
+          axis.text = element_text(size = 12),
+          legend.text = element_text(size = 12))
+```
+
+## Households Below the Poverty Line by Zone
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Step 1: Merge MSNA data with and MEB cost
+filtered_data <- msna_clean_data2 %>%
+    left_join(zone_data, by = c("admin2" = "Zone Code")) %>%
+    left_join(jmmi_meb_cost, by = "Zone Name")
+
+# Step 2: Calculate zone-level average of `Equivalent MEB*`
+zone_meb_avg <- filtered_data %>%
+    group_by(`Zone Name`) %>%
+    summarize(avg_meb = parse_number(`Average MEB`), .groups = "drop")
+
+# Step 3: Merge back average MEB to household-level data
+filtered_data <- filtered_data %>%
+    left_join(zone_meb_avg, by = "Zone Name")
+
+# Step 4: Calculate proportion of households below avg MEB per zone
+poverty_props <- filtered_data %>%
+  group_by(`Zone Name`) %>%
+  summarize(`Equivalent Expenditure` = mean(equiv_total_expenditure < avg_meb, na.rm = TRUE) * 100,
+            `Equivalent Sustainable Income` = mean(equiv_sustainable_income < avg_meb, na.rm = TRUE) * 100,
+            `Equivalent Total Income` = mean(equiv_total_income < avg_meb, na.rm = TRUE) * 100,
+            .groups = "drop") %>%
+    drop_na() %>%  # Remove rows with any NA values
+    arrange(`Zone Name`) %>%
+    mutate(across(where(is.numeric), ~ sprintf("%.2f%%", .)))
+
+# Step 5: Render table
+knitr::kable(poverty_props,
+             align = c("l", "c", "c", "c"),
+             format = "pipe",
+             col.names = c("Zone Name",
+                           "Equivalent Expenditure",
+                           "Equivalent Sustainable Income",
+                           "Equivalent Total Income")) %>%
+    kableExtra::kable_styling(full_width = FALSE, position = "center", font_size = 14,
+                              latex_options = "hold_position") %>%
+    kableExtra::row_spec(0, bold = TRUE) %>%
+    kableExtra::column_spec(1, width = "4cm") %>%
+    kableExtra::column_spec(2:4, width = "3cm") %>%
+    kableExtra::add_header_above(c(" " = 1,
+                                   "Proportion of Households below Median JMMI basket cost" = 3))
+```
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Step 1: Merge MSNA data with and MEB cost
+filtered_data <- msna_clean_data2 %>%
+    left_join(zone_data, by = c("admin2" = "Zone Code")) %>%
+    left_join(jmmi_meb_cost, by = "Zone Name")
+
+# Step 2: Calculate zone-level average of `Equivalent MEB*`
+zone_meb_avg <- filtered_data %>%
+    group_by(`Zone Name`) %>%
+    summarize(avg_meb = parse_number(`Equivalent MEB*`), .groups = "drop")
+
+# Step 3: Merge back average MEB to household-level data
+filtered_data <- filtered_data %>%
+    left_join(zone_meb_avg, by = "Zone Name")
+
+# Step 4: Calculate proportion of households below avg MEB per zone
+poverty_props <- filtered_data %>%
+  group_by(`Zone Name`) %>%
+  summarize(`Equivalent Expenditure` = mean(equiv_total_expenditure < avg_meb, na.rm = TRUE) * 100,
+            `Equivalent Sustainable Income` = mean(equiv_sustainable_income < avg_meb, na.rm = TRUE) * 100,
+            `Equivalent Total Income` = mean(equiv_total_income < avg_meb, na.rm = TRUE) * 100,
+            .groups = "drop") %>%
+    drop_na() %>%  # Remove rows with any NA values
+    arrange(`Zone Name`) %>%
+    mutate(across(where(is.numeric), ~ sprintf("%.2f%%", .)))
+
+# Step 5: Render table
+knitr::kable(poverty_props,
+             align = c("l", "c", "c", "c"),
+             format = "pipe",
+             col.names = c("Zone Name",
+                           "Equivalent Expenditure",
+                           "Equivalent Sustainable Income",
+                           "Equivalent Total Income")) %>%
+    kableExtra::kable_styling(full_width = FALSE, position = "center", font_size = 14,
+                              latex_options = "hold_position") %>%
+    kableExtra::row_spec(0, bold = TRUE) %>%
+    kableExtra::column_spec(1, width = "4cm") %>%
+    kableExtra::column_spec(2:4, width = "3cm") %>%
+    kableExtra::add_header_above(c(" " = 1,
+                                   "Proportion of Households below Equivalent Median JMMI basket cost" = 3))
+```
+
+## Geographic Distribution of Households Below the JMMI MEB Poverty Line
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Summarize poverty data
+poverty_numeric <- filtered_data %>%
+  group_by(`Zone Name`) %>%
+  summarize(`Equivalent Expenditure` = mean(equiv_total_expenditure < avg_meb, na.rm = TRUE) * 100,
+            `Equivalent Sustainable Income` = mean(equiv_sustainable_income < avg_meb, na.rm = TRUE) * 100,
+            `Equivalent Total Income` = mean(equiv_total_income < avg_meb, na.rm = TRUE) * 100,
+            .groups = "drop") %>%
+    drop_na()
+
+# Join with shapefile
+map_data <- zone_shapefile %>%
+    left_join(poverty_numeric, by = c("admin2Name" = "Zone Name"))
+
+# Filter mapped zones
+mapped_zones <- map_data %>%
+    filter(!is.na(`Equivalent Total Income`)) %>%
+    mutate(tooltip_text = paste0(admin2Name, "<br>", "Below MEB: ", 
+                                 round(`Equivalent Total Income`, 1), "%"))
+
+# Centroids for label
+zone_labels <- st_centroid(mapped_zones) %>%
+    mutate(label = paste0(admin2Name, "\n", 
+                          round(`Equivalent Total Income`, 1), "%"))
+
+# Plot with ggplot
+p <- ggplot() +
+    geom_sf(data = map_data, fill = "#F5D3AB", color = "grey90", size = 0.01) +
+    geom_sf(data = mapped_zones, aes(fill = `Equivalent Total Income`, text = tooltip_text), color = "white", size = 0.3) +
+    geom_sf_text(data = zone_labels, aes(label = label), size = 3, color = "black") +
+    scale_fill_gradientn(colors = c("#58585A", "#79797B", "#F49E8F", "#F1797A", "#EE5859"),
+                         name = "Below MEB (%)",
+                         labels = label_percent(scale = 1)) +
+    labs(title = "Proportion of Households Below Average MEB",
+         caption = "Source: MSNA & JMMI") +
+    theme_void() +
+    theme_minimal() +
+    theme(axis.line = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          panel.grid = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank()) +
+    theme(legend.position = "right",
+          plot.title = element_text(face = "bold", hjust = 0.5),
+          plot.caption = element_text(size = 9))
+
+# Convert to interactive plot
+ggplotly(p, tooltip = "text") %>% 
+    config(displayModeBar = FALSE)
+```
+
+### Overall Households Below the Poverty Line
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Calculate overall percentages
+overall_poverty <- tibble(Indicator = c("Equivalent Expenditure", "Equivalent Sustainable Income", "Equivalent Total Income"),
+                          `%` = c(mean(filtered_data$equiv_total_expenditure < filtered_data$avg_meb, na.rm = TRUE),
+                                  mean(filtered_data$equiv_sustainable_income < filtered_data$avg_meb, na.rm = TRUE),
+                                  mean(filtered_data$equiv_total_income < filtered_data$avg_meb, na.rm = TRUE)) * 100) %>%
+    mutate(`%` = paste0(round(`%`, 2), "%"))
+
+# Display table
+kable(overall_poverty, caption = "")
+```
+
+### National MEB Poverty Line
+
+The national MEB poverty line is defined as the **median** JMMI MEB cost across all assessed zones. Based on the data, this value is calculated as:  
+**ETB 1,0669**. 
+
+### Overall Population under the MEB national poverty line
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Calculate overall percentages
+overall_poverty2 <- tibble(Indicator = c("Equivalent Expenditure", "Equivalent Sustainable Income", "Equivalent Total Income"),
+                           `%` = c(mean(filtered_data$equiv_total_expenditure < 10669),
+                                   mean(filtered_data$equiv_sustainable_income < 10669),
+                                   mean(filtered_data$equiv_total_income < 10669)) * 100) %>%
+    mutate(`%` = paste0(round(`%`, 2), "%"))
+
+# Display table
+kable(overall_poverty2, caption = "")
+```
+
+### Population under the MEB national poverty line per Zone
+
+```{r}
+#| echo: false
+#| message: false
+#| warning: false
+
+# Step 1: Merge MSNA data with zone data and JMMI MEB cost
+filtered_data <- msna_clean_data2 %>%
+    left_join(zone_data, by = c("admin2" = "Zone Code")) %>%
+    left_join(jmmi_meb_cost, by = "Zone Name")
+
+# Step 2: Calculate the national average of the JMMI 'Average MEB' cost
+nat_meb_avg <- filtered_data %>%
+    summarize(avg_meb = mean(parse_number(`Average MEB`), na.rm = TRUE), .groups = "drop")
+
+# Extract the numeric national average MEB value
+nat_avg_value <- nat_meb_avg$avg_meb
+
+# Step 3: Calculate proportion of households below national average MEB per zone
+poverty_props <- filtered_data %>%
+    group_by(`Zone Name`) %>%
+    summarize(`Equivalent Expenditure` = mean(equiv_total_expenditure < nat_avg_value, na.rm = TRUE) * 100,
+              `Equivalent Sustainable Income` = mean(equiv_sustainable_income < nat_avg_value, na.rm = TRUE) * 100,
+              `Equivalent Total Income` = mean(equiv_total_income < nat_avg_value, na.rm = TRUE) * 100,
+              .groups = "drop") %>%
+    drop_na() %>%
+    arrange(`Zone Name`) %>%
+    mutate(across(where(is.numeric), ~ sprintf("%.2f%%", .)))
+
+# Step 4: Render the table nicely with styling
+knitr::kable(poverty_props,
+             align = c("l", "c", "c", "c"),
+             format = "pipe",
+             col.names = c("Zone Name",
+                           "Equivalent Expenditure",
+                           "Equivalent Sustainable Income",
+                           "Equivalent Total Income")) %>%
+  kableExtra::kable_styling(full_width = FALSE, position = "center", font_size = 14,
+                            latex_options = "hold_position") %>%
+  kableExtra::row_spec(0, bold = TRUE) %>%
+  kableExtra::column_spec(1, width = "4cm") %>%
+  kableExtra::column_spec(2:4, width = "3cm") %>%
+  kableExtra::add_header_above(c(" " = 1,
+                                 "Proportion of Households below National Median JMMI basket cost" = 3))
+```
+
+:::
